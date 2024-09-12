@@ -268,9 +268,9 @@ public class Main {
                         agentsRegistration.append("\n  ->Agent<").append(agentName).append(">()");
                     }
                     agentsRegistration.append(";");
-                    return new Pair<>(pair.getFirst(), moduleNameMatcher.replaceFirst(agentsRegistration.toString()).replaceAll(INITIALIZE_BODY_MODULE_REGEX, ""));
+                    return new Pair<>(pair.getFirst(), moduleNameMatcher.replaceFirst(agentsRegistration.toString()).replaceAll(INITIALIZE_BODY_MODULE_REGEX, String.format("//todo(codegen-removal): if needed override ScModule::Initialize and move all non-keynodes and non-agents code from previous initialization method\n/*\n${%s}\n*/\n", CODE_BLOCK_GROUP)));
                 })
-                .map(pair -> new Pair<>(pair.getFirst(), pair.getSecond().replaceAll(SHUTDOWN_BODY_MODULE_REGEX + "\\s*", "")))
+                .map(pair -> new Pair<>(pair.getFirst(), pair.getSecond().replaceAll(SHUTDOWN_BODY_MODULE_REGEX + "\\s*", String.format("//todo(codegen-removal): if needed override ScModule::Shutdown and move all non-agents code from previous shutdown method\n/*\n${%s}\n*/\n", CODE_BLOCK_GROUP))))
                 .peek(pair -> System.out.println("Module source file " + pair.getFirst() + " was updated"))
                 .forEach(pair -> writeToFile(pair.getFirst() + FILE_POSTFIX, pair.getSecond()));
     }
