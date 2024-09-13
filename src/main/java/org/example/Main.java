@@ -90,6 +90,42 @@ public class Main {
     private static final Pattern CORE_KEYNODES_PATTERN = Pattern.compile(CORE_KEYNODES_REGEX);
     private static final Pattern AGENT_UTILS_PATTERN = Pattern.compile(AGENT_UTILS_REGEX);
 
+    private static final List<Pair<String, String>> DEPRECATED_METHODS = Arrays.asList(
+            new Pair<>("CreateNode", "GenerateNode"),
+            new Pair<>("CreateLink", "GenerateLink"),
+            new Pair<>("CreateEdge", "GenerateConnector"),
+            new Pair<>("GetElementOutputArcsCount", "GetElementEdgesAndOutgoingArcsCount"),
+            new Pair<>("GetElementInputArcsCount", "GetElementEdgesAndIncomingArcsCount"),
+            new Pair<>("GetEdgeSource", "GetArcSourceElement"),
+            new Pair<>("GetEdgeTarget", "GetArcTargetElement"),
+            new Pair<>("GetEdgeInfo", "GetConnectorIncidentElements"),
+            new Pair<>("Iterator3", "CreateIterator3"),
+            new Pair<>("Iterator5", "CreateIterator5"),
+            new Pair<>("ForEachIter3", "ForEach"),
+            new Pair<>("ForEachIter5", "ForEach"),
+            new Pair<>("HelperCheckEdge", "CheckConnector"),
+            new Pair<>("FindLinksByContent", "SearchLinksByContent"),
+            new Pair<>("FindLinksByContentSubstring", "SearchLinksByContentSubstring"),
+            new Pair<>("FindLinksContentsByContentSubstring", "SearchLinksContentsByContentSubstring"),
+            new Pair<>("HelperSetSystemIdtf", "SetElementSystemIdentifier"),
+            new Pair<>("HelperGetSystemIdtf", "GetElementSystemIdentifier"),
+            new Pair<>("HelperResolveSystemIdtf", "ResolveElementSystemIdentifier"),
+            new Pair<>("HelperFindBySystemIdtf", "SearchElementBySystemIdentifier"),
+            new Pair<>("HelperGenTemplate", "GenerateByTemplate"),
+            new Pair<>("HelperSearchTemplate", "SearchByTemplate"),
+            new Pair<>("HelperSmartSearchTemplate", "SearchByTemplateInterruptibly"),
+            new Pair<>("HelperBuildTemplate", "BuildTemplate"),
+            new Pair<>("CalculateStat", "CalculateStatistics"),
+            new Pair<>("BeingEventsPending", "BeginEventsPending"),
+            new Pair<>("BeingEventsBlocking", "BeginEventsBlocking")
+    );
+
+    private static final Set<Pattern> METHODS_WITH_CHANGED_SIGNATURE_PATTERNS = new HashSet<>(Arrays.asList(
+            Pattern.compile(".*?\\bGetConnectorIncidentElements\\b"),
+            Pattern.compile(".*?\\bGenerateByTemplate\\b"),
+            Pattern.compile(".*?\\BuildTemplate\\b")
+    ));
+
 
     public static void main(String[] args) {
         System.out.println("Removing codegen at paths:");
@@ -119,6 +155,8 @@ public class Main {
         removeOldStatement(readFiles(cppFiles));
         replaceCoreKeynodes(readFiles(cppFiles));
         replaceHeaderInclude(readFiles(cppFiles));
+        replaceDeprecatedMethods(readFiles(cppFiles));
+        printMethodsWithChangedSignatureWarning(readFiles(cppFiles));
         printAgentUtilsWarnings(readFiles(cppFiles));
         printAgentRegistrationWarnings(readFiles(cppFiles));
     }
@@ -467,6 +505,19 @@ public class Main {
                 .forEach(pair -> writeToFile(pair.getFirst() + FILE_POSTFIX, pair.getSecond()));
     }
 
+    private static void replaceDeprecatedMethods(List<Pair<File, String>> cppFiles) {
+        cppFiles.stream()
+                .filter(pair -> DEPRECATED_METHODS.stream().anyMatch(methods -> Pattern.compile(String.format("\\b%s\\b", methods.getFirst())).matcher(pair.getSecond()).find()))
+                .map(pair -> {
+                    String content = pair.getSecond();
+                    content = DEPRECATED_METHODS.stream().reduce(content, (code, methods) -> code.replaceAll(String.format("\\b%s\\b", methods.getFirst()), methods.getSecond()), (code1, code2) -> code1);
+                    return new Pair<>(pair.getFirst(), content);
+                })
+                .peek(pair -> System.out.println("Replacing deprecated methods in " + pair.getFirst()))
+                .forEach(pair -> writeToFile(pair.getFirst() + FILE_POSTFIX, pair.getSecond()));
+
+    }
+
     private static void removeCmakeCodegen(List<Pair<File, String>> cmakeFiles) {
         cmakeFiles.stream()
                 .filter(pair -> CODEGEN_CMAKE_PATTERN.matcher(pair.getSecond()).find())
@@ -481,6 +532,25 @@ public class Main {
         } catch (FileNotFoundException e) {
             System.err.println("ERROR: cannot write to a file " + filename);
         }
+    }
+
+    private static void printMethodsWithChangedSignatureWarning(List<Pair<File, String>> cppFiles) {
+        cppFiles.stream()
+                .filter(pair -> METHODS_WITH_CHANGED_SIGNATURE_PATTERNS.stream().anyMatch(pattern -> pattern.matcher(pair.getSecond()).find()))
+                .map(pair -> {
+                    String content = pair.getSecond();
+                    content = METHODS_WITH_CHANGED_SIGNATURE_PATTERNS.stream().reduce(content, (code, pattern) -> {
+                        Matcher matcher = pattern.matcher(code);
+                        StringBuffer sb = new StringBuffer();
+                        while (matcher.find()) {
+                            matcher.appendReplacement(sb, "//todo(codegen-removal): method has signature changed\n" + matcher.group());
+                        }
+                        matcher.appendTail(sb);
+                        return sb.toString();
+                    }, (code1, code2) -> code1);
+                    return new Pair<>(pair.getFirst(), content);
+                })
+                .forEach(pair -> writeToFile(pair.getFirst() + FILE_POSTFIX, pair.getSecond()));
     }
 
     private static void printAgentUtilsWarnings(List<Pair<File, String>> cppFilesAfterCodegenRemoval) {
