@@ -121,10 +121,49 @@ public class Main {
     );
 
     private static final Set<Pattern> METHODS_WITH_CHANGED_SIGNATURE_PATTERNS = new HashSet<>(Arrays.asList(
+            Pattern.compile(".*?\\bSearchLinksByContentSubstring\\b"),
+            Pattern.compile(".*?\\bSearchLinksByContent\\b"),
+            Pattern.compile(".*?\\bSearchLinksContentsByContentSubstring\\b"),
             Pattern.compile(".*?\\bGetConnectorIncidentElements\\b"),
             Pattern.compile(".*?\\bGenerateByTemplate\\b"),
             Pattern.compile(".*?\\BuildTemplate\\b")
     ));
+
+    private static final Set<String> EVENTS_WITHOUT_EDGE = new HashSet<>();
+    static {
+        EVENTS_WITHOUT_EDGE.add("ScEventBeforeEraseElement");
+        EVENTS_WITHOUT_EDGE.add("ScEventBeforeChangeLinkContent");
+    }
+
+    private static final Map<String, String> OLD_TO_NEW_EVENTS_MAP = new HashMap<>();
+    private static final List<Pair<String, String>> OLD_TO_NEW_EVENTS_PAIRS = new ArrayList<>();
+    static{
+        OLD_TO_NEW_EVENTS_MAP.put("ScEvent::Type::AddOutputEdge", "ScEventAfterGenerateOutgoingArc");
+        OLD_TO_NEW_EVENTS_MAP.put("SC_EVENT_ADD_OUTPUT_ARC", "ScEventAfterGenerateOutgoingArc");
+        OLD_TO_NEW_EVENTS_MAP.put("ScEvent::Type::AddInputEdge", "ScEventAfterGenerateIncomingArc");
+        OLD_TO_NEW_EVENTS_MAP.put("SC_EVENT_ADD_INPUT_ARC", "ScEventAfterGenerateIncomingArc");
+        OLD_TO_NEW_EVENTS_MAP.put("ScEvent::Type::RemoveOutputEdge", "ScEventBeforeEraseOutgoingArc");
+        OLD_TO_NEW_EVENTS_MAP.put("SC_EVENT_REMOVE_OUTPUT_ARC", "ScEventBeforeEraseOutgoingArc");
+        OLD_TO_NEW_EVENTS_MAP.put("ScEvent::Type::RemoveInputEdge", "ScEventBeforeEraseIncomingArc");
+        OLD_TO_NEW_EVENTS_MAP.put("SC_EVENT_REMOVE_INPUT_ARC", "ScEventBeforeEraseIncomingArc");
+        OLD_TO_NEW_EVENTS_MAP.put("ScEvent::Type::EraseElement", "ScEventBeforeEraseElement");
+        OLD_TO_NEW_EVENTS_MAP.put("SC_EVENT_REMOVE_ELEMENT", "ScEventBeforeEraseElement");
+        OLD_TO_NEW_EVENTS_MAP.put("ScEvent::Type::ContentChanged", "ScEventBeforeChangeLinkContent");
+        OLD_TO_NEW_EVENTS_MAP.put("SC_EVENT_CONTENT_CHANGED", "ScEventBeforeChangeLinkContent");
+
+        OLD_TO_NEW_EVENTS_PAIRS.add(new Pair<>("ScEvent::Type::AddOutputEdge", "ScEventAfterGenerateOutgoingArc"));
+        OLD_TO_NEW_EVENTS_PAIRS.add(new Pair<>("SC_EVENT_ADD_OUTPUT_ARC", "ScKeynodes::sc_event_after_generate_outgoing_arc"));
+        OLD_TO_NEW_EVENTS_PAIRS.add(new Pair<>("ScEvent::Type::AddInputEdge", "ScEventAfterGenerateIncomingArc"));
+        OLD_TO_NEW_EVENTS_PAIRS.add(new Pair<>("SC_EVENT_ADD_INPUT_ARC", "ScKeynodes::sc_event_after_generate_incoming_arc"));
+        OLD_TO_NEW_EVENTS_PAIRS.add(new Pair<>("ScEvent::Type::RemoveOutputEdge", "ScEventBeforeEraseOutgoingArc"));
+        OLD_TO_NEW_EVENTS_PAIRS.add(new Pair<>("SC_EVENT_REMOVE_OUTPUT_ARC", "ScKeynodes::sc_event_before_erase_outgoing_arc"));
+        OLD_TO_NEW_EVENTS_PAIRS.add(new Pair<>("ScEvent::Type::RemoveInputEdge", "ScEventBeforeEraseIncomingArc"));
+        OLD_TO_NEW_EVENTS_PAIRS.add(new Pair<>("SC_EVENT_REMOVE_INPUT_ARC", "ScKeynodes::sc_event_before_erase_incoming_arc"));
+        OLD_TO_NEW_EVENTS_PAIRS.add(new Pair<>("ScEvent::Type::EraseElement", "ScEventBeforeEraseElement"));
+        OLD_TO_NEW_EVENTS_PAIRS.add(new Pair<>("SC_EVENT_REMOVE_ELEMENT", "ScKeynodes::sc_event_before_erase_element"));
+        OLD_TO_NEW_EVENTS_PAIRS.add(new Pair<>("ScEvent::Type::ContentChanged", "ScEventBeforeChangeLinkContent"));
+        OLD_TO_NEW_EVENTS_PAIRS.add(new Pair<>("SC_EVENT_CONTENT_CHANGED", "ScKeynodes::sc_event_before_change_link_content"));
+    }
 
 
     public static void main(String[] args) {
@@ -155,6 +194,7 @@ public class Main {
         removeOldStatement(readFiles(cppFiles));
         replaceCoreKeynodes(readFiles(cppFiles));
         replaceHeaderInclude(readFiles(cppFiles));
+        replaceOldEvents(readFiles(cppFiles));
         replaceDeprecatedMethods(readFiles(cppFiles));
         printMethodsWithChangedSignatureWarning(readFiles(cppFiles));
         printAgentUtilsWarnings(readFiles(cppFiles));
@@ -387,10 +427,10 @@ public class Main {
                         if (!isActionInitiatedAgent) {
                             subscriptionElement = initiationConditionMatcher.group(SUBSCRIPTION_ELEMENT_GROUP);
                             eventType = initiationConditionMatcher.group(EVENT_TYPE_GROUP);
-                            if (!OLD_TO_NEW_EVENTS.containsKey(eventType)) {
+                            if (!OLD_TO_NEW_EVENTS_MAP.containsKey(eventType)) {
                                 throw new IllegalArgumentException("Unknown event " + eventType + " in " + pair.getFirst());
                             }
-                            eventType = OLD_TO_NEW_EVENTS.get(eventType);
+                            eventType = OLD_TO_NEW_EVENTS_MAP.get(eventType);
                             isActionInitiatedAgent = (subscriptionElement.endsWith("action_initiated") || subscriptionElement.endsWith("question_initiated")) && "ScEventAfterGenerateOutgoingArc".equals(eventType);
                         }
                         String newEvent = isActionInitiatedAgent ? "ScActionInitiatedEvent" : (EVENTS_WITHOUT_EDGE.contains(eventType) ? eventType : eventType + "<ScType::EdgeAccessConstPosPerm>");
@@ -432,28 +472,6 @@ public class Main {
         writeToFile(filePath, content);
     }
 
-    private static final Set<String> EVENTS_WITHOUT_EDGE = new HashSet<>();
-    static {
-        EVENTS_WITHOUT_EDGE.add("ScEventBeforeEraseElement");
-        EVENTS_WITHOUT_EDGE.add("ScEventBeforeChangeLinkContent");
-    }
-
-    private static final Map<String, String> OLD_TO_NEW_EVENTS = new HashMap<>();
-    static{
-        OLD_TO_NEW_EVENTS.put("ScEvent::Type::AddOutputEdge", "ScEventAfterGenerateOutgoingArc");
-        OLD_TO_NEW_EVENTS.put("SC_EVENT_ADD_OUTPUT_ARC", "ScEventAfterGenerateOutgoingArc");
-        OLD_TO_NEW_EVENTS.put("ScEvent::Type::AddInputEdge", "ScEventAfterGenerateIncomingArc");
-        OLD_TO_NEW_EVENTS.put("SC_EVENT_ADD_INPUT_ARC", "ScEventAfterGenerateIncomingArc");
-        OLD_TO_NEW_EVENTS.put("ScEvent::Type::RemoveOutputEdge", "ScEventBeforeEraseOutgoingArc");
-        OLD_TO_NEW_EVENTS.put("SC_EVENT_REMOVE_OUTPUT_ARC", "ScEventBeforeEraseOutgoingArc");
-        OLD_TO_NEW_EVENTS.put("ScEvent::Type::RemoveInputEdge", "ScEventBeforeEraseIncomingArc");
-        OLD_TO_NEW_EVENTS.put("SC_EVENT_REMOVE_INPUT_ARC", "ScEventBeforeEraseIncomingArc");
-        OLD_TO_NEW_EVENTS.put("ScEvent::Type::EraseElement", "ScEventBeforeEraseElement");
-        OLD_TO_NEW_EVENTS.put("SC_EVENT_REMOVE_ELEMENT", "ScEventBeforeEraseElement");
-        OLD_TO_NEW_EVENTS.put("ScEvent::Type::ContentChanged", "ScEventBeforeChangeLinkContent");
-        OLD_TO_NEW_EVENTS.put("SC_EVENT_CONTENT_CHANGED", "ScEventBeforeChangeLinkContent");
-    }
-
     private static void replaceScPropertyKeynode(List<Pair<File, String>> cppFiles) {
         cppFiles.stream()
             .filter(pair -> KEYNODE_PATTERN.matcher(pair.getSecond()).find())
@@ -463,8 +481,6 @@ public class Main {
                 while (matcher.find()) {
                     String replacement = getKeynodeReplacement(matcher);
                     matcher.appendReplacement(sb, replacement);
-
-//                    String keynodeName = matcher.group(KEYNODE_NAME_GROUP);
                 }
                 matcher.appendTail(sb);
                 return new Pair<>(pair.getFirst(), sb.toString());
@@ -506,16 +522,23 @@ public class Main {
     }
 
     private static void replaceDeprecatedMethods(List<Pair<File, String>> cppFiles) {
-        cppFiles.stream()
-                .filter(pair -> DEPRECATED_METHODS.stream().anyMatch(methods -> Pattern.compile(String.format("\\b%s\\b", methods.getFirst())).matcher(pair.getSecond()).find()))
+        replaceDeprecatedStrings(cppFiles, DEPRECATED_METHODS);
+    }
+
+    private static void replaceOldEvents(List<Pair<File, String>> cppFiles) {
+        replaceDeprecatedStrings(cppFiles, OLD_TO_NEW_EVENTS_PAIRS);
+    }
+
+    private static void replaceDeprecatedStrings(List<Pair<File, String>> files, List<Pair<String, String>> deprecatedPairs) {
+        files.stream()
+                .filter(pair -> deprecatedPairs.stream().anyMatch(methods -> Pattern.compile(String.format("\\b%s\\b", methods.getFirst())).matcher(pair.getSecond()).find()))
                 .map(pair -> {
                     String content = pair.getSecond();
-                    content = DEPRECATED_METHODS.stream().reduce(content, (code, methods) -> code.replaceAll(String.format("\\b%s\\b", methods.getFirst()), methods.getSecond()), (code1, code2) -> code1);
+                    content = deprecatedPairs.stream().reduce(content, (code, methods) -> code.replaceAll(String.format("\\b%s\\b", methods.getFirst()), methods.getSecond()), (code1, code2) -> code1);
                     return new Pair<>(pair.getFirst(), content);
                 })
-                .peek(pair -> System.out.println("Replacing deprecated methods in " + pair.getFirst()))
+                .peek(pair -> System.out.println("Replacing deprecations in " + pair.getFirst()))
                 .forEach(pair -> writeToFile(pair.getFirst() + FILE_POSTFIX, pair.getSecond()));
-
     }
 
     private static void removeCmakeCodegen(List<Pair<File, String>> cmakeFiles) {
