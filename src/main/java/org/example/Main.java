@@ -12,6 +12,15 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 public class Main {
+    private static final String TODO_PREFIX = "//todo(codegen-removal): ";
+    private static final String TODO_BLOCK =
+            TODO_PREFIX + "remove agent starting and finishing logs, sc-machine is printing them now\n" +
+            TODO_PREFIX + "if your agent is ScActionInitiatedAgent and uses event only to get action node via event.GetOtherElement() then you can remove event from method arguments and use ScAction & action instead of your action node\n" +
+            TODO_PREFIX + "if your agent is having method like CheckActionClass(ScAddr actionAddr) that checks connector between action class and actionAddr then you can remove it. Before agent is started sc-machine check that action belongs to class returned by GetActionClass()\n" +
+            TODO_PREFIX + "use action.SetResult() to pass result of your action instead of using answer or answerElements\n" +
+            TODO_PREFIX + "use SC_AGENT_LOG_SOMETHING() instead of SC_LOG_SOMETHING to automatically include agent name to logs messages\n" +
+            TODO_PREFIX + "use auto const & [names of action arguments] = action.GetArguments<amount of arguments>(); to get action arguments\n";
+
     private static final String FILE_POSTFIX = "";
     private static final String GENERATED_INCLUDE_REGEX = "#include\\s+.*?generated\\..*?\n";
     private static final String SC_CLASS_REGEX = "SC_CLASS\\s*\\(\\s*\\)";
@@ -41,7 +50,7 @@ public class Main {
     private static final String GET_ACTION_CLASS_BODY =
             "::GetActionClass() const\n" +
             "{\n" +
-            "//todo(codegen-removal): replace action with your action class\n" +
+            TODO_PREFIX + "replace action with your action class\n" +
             "  return ScKeynodes::action;\n" +
             "}\n";
 
@@ -152,16 +161,22 @@ public class Main {
         OLD_TO_NEW_EVENTS_MAP.put("SC_EVENT_CONTENT_CHANGED", "ScEventBeforeChangeLinkContent");
 
         OLD_TO_NEW_EVENTS_PAIRS.add(new Pair<>("ScEvent::Type::AddOutputEdge", "ScEventAfterGenerateOutgoingArc"));
+        OLD_TO_NEW_EVENTS_PAIRS.add(new Pair<>("ScEventAddOutputEdge", "ScEventAfterGenerateOutgoingArc"));
         OLD_TO_NEW_EVENTS_PAIRS.add(new Pair<>("SC_EVENT_ADD_OUTPUT_ARC", "ScKeynodes::sc_event_after_generate_outgoing_arc"));
         OLD_TO_NEW_EVENTS_PAIRS.add(new Pair<>("ScEvent::Type::AddInputEdge", "ScEventAfterGenerateIncomingArc"));
+        OLD_TO_NEW_EVENTS_PAIRS.add(new Pair<>("ScEventAddInputEdge", "ScEventAfterGenerateIncomingArc"));
         OLD_TO_NEW_EVENTS_PAIRS.add(new Pair<>("SC_EVENT_ADD_INPUT_ARC", "ScKeynodes::sc_event_after_generate_incoming_arc"));
         OLD_TO_NEW_EVENTS_PAIRS.add(new Pair<>("ScEvent::Type::RemoveOutputEdge", "ScEventBeforeEraseOutgoingArc"));
+        OLD_TO_NEW_EVENTS_PAIRS.add(new Pair<>("ScEventRemoveOutputEdge", "ScEventBeforeEraseOutgoingArc"));
         OLD_TO_NEW_EVENTS_PAIRS.add(new Pair<>("SC_EVENT_REMOVE_OUTPUT_ARC", "ScKeynodes::sc_event_before_erase_outgoing_arc"));
         OLD_TO_NEW_EVENTS_PAIRS.add(new Pair<>("ScEvent::Type::RemoveInputEdge", "ScEventBeforeEraseIncomingArc"));
+        OLD_TO_NEW_EVENTS_PAIRS.add(new Pair<>("ScEventRemoveInputEdge", "ScEventBeforeEraseIncomingArc"));
         OLD_TO_NEW_EVENTS_PAIRS.add(new Pair<>("SC_EVENT_REMOVE_INPUT_ARC", "ScKeynodes::sc_event_before_erase_incoming_arc"));
         OLD_TO_NEW_EVENTS_PAIRS.add(new Pair<>("ScEvent::Type::EraseElement", "ScEventBeforeEraseElement"));
+        OLD_TO_NEW_EVENTS_PAIRS.add(new Pair<>("ScEventEraseElement", "ScEventBeforeEraseElement"));
         OLD_TO_NEW_EVENTS_PAIRS.add(new Pair<>("SC_EVENT_REMOVE_ELEMENT", "ScKeynodes::sc_event_before_erase_element"));
         OLD_TO_NEW_EVENTS_PAIRS.add(new Pair<>("ScEvent::Type::ContentChanged", "ScEventBeforeChangeLinkContent"));
+        OLD_TO_NEW_EVENTS_PAIRS.add(new Pair<>("ScEventContentChanged", "ScEventBeforeChangeLinkContent"));
         OLD_TO_NEW_EVENTS_PAIRS.add(new Pair<>("SC_EVENT_CONTENT_CHANGED", "ScKeynodes::sc_event_before_change_link_content"));
     }
 
@@ -277,7 +292,7 @@ public class Main {
                 .map(pair -> new Pair<>(pair.getFirst(), pair.getSecond().replaceAll(GENERATED_INCLUDE_REGEX + "\\s*", "")))
                 .map(pair -> new Pair<>(pair.getFirst(), pair.getSecond().replaceAll(SC_CLASS_REGEX + "\\s*", "")))
                 .map(pair -> new Pair<>(pair.getFirst(), pair.getSecond().replaceAll(GENERATED_BODY_REGEX + "\\s*", "")))
-                .map(pair -> new Pair<>(pair.getFirst(), pair.getSecond().replaceAll("#pragma\\s+once\n", "#pragma once\n#include <sc-memory/sc_keynodes.hpp>\n")))
+                .map(pair -> new Pair<>(pair.getFirst(), pair.getSecond().replaceAll("#pragma\\s+once\n", "#pragma once\n\n#include <sc-memory/sc_keynodes.hpp>\n")))
                 .map(pair -> new Pair<>(pair.getFirst(), pair.getSecond().replaceAll(":\\s+public\\s+ScObject", ": public ScKeynodes")))
                 .peek(pair -> {
                     String header = pair.getFirst().getAbsolutePath();
@@ -346,9 +361,9 @@ public class Main {
                         agentsRegistration.append("\n  ->Agent<").append(agentName).append(">()");
                     }
                     agentsRegistration.append(";");
-                    return new Pair<>(pair.getFirst(), moduleNameMatcher.replaceFirst(agentsRegistration.toString()).replaceAll(INITIALIZE_BODY_MODULE_REGEX, String.format("//todo(codegen-removal): if needed override ScModule::Initialize and move all non-keynodes and non-agents code from previous initialization method\n/*\n${%s}\n*/\n", CODE_BLOCK_GROUP)));
+                    return new Pair<>(pair.getFirst(), moduleNameMatcher.replaceFirst(agentsRegistration.toString()).replaceAll(INITIALIZE_BODY_MODULE_REGEX, String.format("%sif needed override ScModule::Initialize and move all non-keynodes and non-agents code from previous initialization method\n/*\n${%s}\n*/\n", TODO_PREFIX, CODE_BLOCK_GROUP)));
                 })
-                .map(pair -> new Pair<>(pair.getFirst(), pair.getSecond().replaceAll(SHUTDOWN_BODY_MODULE_REGEX + "\\s*", String.format("//todo(codegen-removal): if needed override ScModule::Shutdown and move all non-agents code from previous shutdown method\n/*\n${%s}\n*/\n", CODE_BLOCK_GROUP))))
+                .map(pair -> new Pair<>(pair.getFirst(), pair.getSecond().replaceAll(SHUTDOWN_BODY_MODULE_REGEX + "\\s*", String.format("%sif needed override ScModule::Shutdown and move all non-agents code from previous shutdown method\n/*\n${%s}\n*/\n", TODO_PREFIX, CODE_BLOCK_GROUP))))
                 .peek(pair -> System.out.println("Module source file " + pair.getFirst() + " was updated"))
                 .forEach(pair -> writeToFile(pair.getFirst() + FILE_POSTFIX, pair.getSecond()));
     }
@@ -395,7 +410,7 @@ public class Main {
                         }
                         returnMatcher.appendTail(sb);
                         sb.append(String.format(AGENT_HPP_OVERRIDDEN_GET_ACTION_CLASS, agentName));
-                        agentBody = sb.toString().replaceFirst(AGENT_NAME_IN_CPP_REGEX, "ScResult " + agentName + "::DoProgram(ScActionInitiatedEvent const & event, ScAction & action)");
+                        agentBody = sb.toString().replaceFirst(AGENT_NAME_IN_CPP_REGEX, TODO_BLOCK + "ScResult " + agentName + "::DoProgram(ScActionInitiatedEvent const & event, ScAction & action)");
                         agentNameMatcher.appendReplacement(fullSb, agentBody);
                     }
                     agentNameMatcher.appendTail(fullSb);
@@ -566,7 +581,7 @@ public class Main {
                         Matcher matcher = pattern.matcher(code);
                         StringBuffer sb = new StringBuffer();
                         while (matcher.find()) {
-                            matcher.appendReplacement(sb, "//todo(codegen-removal): method has signature changed\n" + matcher.group());
+                            matcher.appendReplacement(sb, TODO_PREFIX + "method has signature changed\n" + matcher.group());
                         }
                         matcher.appendTail(sb);
                         return sb.toString();
@@ -584,7 +599,7 @@ public class Main {
                     Matcher matcher = AGENT_UTILS_PATTERN.matcher(pair.getSecond());
                     StringBuffer sb = new StringBuffer();
                     while (matcher.find()) {
-                        matcher.appendReplacement(sb, "//todo(codegen-removal): replace AgentUtils:: usage\n" + matcher.group());
+                        matcher.appendReplacement(sb, TODO_PREFIX + "replace AgentUtils:: usage\n" + matcher.group());
                     }
                     matcher.appendTail(sb);
                     return new Pair<>(pair.getFirst(), sb.toString());
@@ -601,7 +616,7 @@ public class Main {
                     StringBuffer sb = new StringBuffer();
                     while (matcher.find()) {
                         String agentName = matcher.group(AGENT_NAME_GROUP);
-                        matcher.appendReplacement(sb, String.format("//todo(codegen-removal): Use agentContext.SubscribeAgent<%s> or UnsubscribeAgent; to register and unregister agent\n" + matcher.group(), agentName));
+                        matcher.appendReplacement(sb, String.format("%sUse agentContext.SubscribeAgent<%s> or UnsubscribeAgent; to register and unregister agent\n" + matcher.group(), TODO_PREFIX, agentName));
                     }
                     matcher.appendTail(sb);
                     return new Pair<>(pair.getFirst(), sb.toString());
