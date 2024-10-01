@@ -7,6 +7,7 @@ import java.io.PrintWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -16,10 +17,17 @@ public class Main {
     private static final String TODO_BLOCK =
             TODO_PREFIX + "remove agent starting and finishing logs, sc-machine is printing them now\n" +
             TODO_PREFIX + "if your agent is ScActionInitiatedAgent and uses event only to get action node via event.GetOtherElement() then you can remove event from method arguments and use ScAction & action instead of your action node\n" +
-            TODO_PREFIX + "if your agent is having method like CheckActionClass(ScAddr actionAddr) that checks connector between action class and actionAddr then you can remove it. Before agent is started sc-machine check that action belongs to class returned by GetActionClass()\n" +
+            TODO_PREFIX + "if your agent is ScActionInitiatedAgent and is having method like CheckActionClass(ScAddr actionAddr) that checks connector between action class and actionAddr then you can remove it. Before agent is started sc-machine checks that action belongs to class returned by GetActionClass()\n" +
             TODO_PREFIX + "use action.SetResult() to pass result of your action instead of using answer or answerElements\n" +
-            TODO_PREFIX + "use SC_AGENT_LOG_SOMETHING() instead of SC_LOG_SOMETHING to automatically include agent name to logs messages\n" +
             TODO_PREFIX + "use auto const & [names of action arguments] = action.GetArguments<amount of arguments>(); to get action arguments\n";
+
+    private static final String SCRIPT_FOOTER_LOG =
+            "Remove agent starting and finishing logs, sc-machine is printing them now\n" +
+            "If your agent is ScActionInitiatedAgent and uses event only to get action node via event.GetOtherElement() then you can remove event from method arguments and use ScAction & action instead of your action node\n" +
+            "If your agent is ScActionInitiatedAgent and is having method like CheckActionClass(ScAddr actionAddr) that checks connector between action class and actionAddr then you can remove it. Before agent is started sc-machine checks that action belongs to class returned by GetActionClass()\n" +
+            "Use action.SetResult() to pass result of your action instead of using answer or answerElements\n" +
+            "Use SC_AGENT_LOG_SOMETHING() instead of SC_LOG_SOMETHING to automatically include agent name to logs messages\n" +
+            "Use auto const & [names of action arguments] = action.GetArguments<amount of arguments>(); to get action arguments\n";
 
     private static final String FILE_POSTFIX = "";
     private static final String GENERATED_INCLUDE_REGEX = "#include\\s+.*?generated\\..*?\n";
@@ -39,8 +47,6 @@ public class Main {
     // SC_CLASS\s*\((\s*.*?(Event\s*\((?<subscriptionElement>.*?)\s*,\s*(?<eventType>.*?)\).*?)|(.*?CmdClass\s*\(\"(?<subscriptionCommand>.*?)\"\)))\)
     private static final String AGENT_INITIATION_CONDITION_REGEX = "SC_CLASS\\s*\\((\\s*.*?(Event\\s*\\((?<" + SUBSCRIPTION_ELEMENT_GROUP + ">.*?)\\s*,\\s*(?<" + EVENT_TYPE_GROUP + ">.*?)\\).*?)|(.*?CmdClass\\s*\\(\"(?<" + SUBSCRIPTION_COMMAND_GROUP + ">.*?)\"\\)))\\)";
     private static final String OUTDATED_INCLUDES_REGEX = "((#include\\s*[\"<]sc-agents-common/keynodes/coreKeynodes.hpp[\">])|(#include\\s*[\"<]sc-agents-common/utils/AgentUtils.hpp[\">])|(#include\\s*[\"<]sc-memory/sc_wait.hpp[\">])|(using\\s*namespace\\s*scAgentsCommon\\s*;))\n";
-    private static final String OLD_SC_AGENT_INCLUDE_REGEX = "(#include\\s*[\"<]sc-memory/kpm/sc_agent.hpp[\">])";
-    private static final String NEW_SC_AGENT_INCLUDE = "#include <sc-memory/sc_agent.hpp>";
     private static final String NEW_AGENT_HPP_BODY =
             "public:\n" +
             "  ScAddr GetActionClass() const override;\n" +
@@ -95,11 +101,13 @@ public class Main {
     private static final Pattern AGENT_BODY_IN_HPP_PATTERN = Pattern.compile(AGENT_NAME_IN_HPP_REGEX + "\\s*" + CODE_BLOCK_REGEX);
     private static final Pattern AGENT_NAME_IN_CPP_PATTERN = Pattern.compile(AGENT_NAME_IN_CPP_REGEX);
     private static final Pattern CODEGEN_CMAKE_PATTERN = Pattern.compile(CODEGEN_CMAKE_REGEX);
-    private static final Pattern OLD_SC_AGENT_INCLUDE_PATTERN = Pattern.compile(OLD_SC_AGENT_INCLUDE_REGEX);
     private static final Pattern CORE_KEYNODES_PATTERN = Pattern.compile(CORE_KEYNODES_REGEX);
     private static final Pattern AGENT_UTILS_PATTERN = Pattern.compile(AGENT_UTILS_REGEX);
 
     private static final List<Pair<String, String>> DEPRECATED_METHODS = Arrays.asList(
+            new Pair<>("#include [\"<]sc-memory/sc_struct.hpp[\">]", "#include <sc-memory/sc_structure.hpp>"),
+            new Pair<>("#include [\"<]sc-memory/sc_kpm/sc_agent.hpp[\">]", "#include <sc-memory/sc_agent.hpp>"),
+            new Pair<>("IsEdge", "IsConnector"),
             new Pair<>("CreateNode", "GenerateNode"),
             new Pair<>("CreateLink", "GenerateLink"),
             new Pair<>("CreateEdge", "GenerateConnector"),
@@ -129,13 +137,56 @@ public class Main {
             new Pair<>("BeingEventsBlocking", "BeginEventsBlocking")
     );
 
+    private static final List<Pair<String, String>> DEPRECATED_TYPES = Arrays.asList(
+            new Pair<>("ScType::EdgeUCommon", "ScType::CommonEdge"),
+            new Pair<>("ScType::EdgeDCommon", "ScType::CommonArc"),
+            new Pair<>("ScType::EdgeUCommonConst", "ScType::ConstCommonEdge"),
+            new Pair<>("ScType::EdgeDCommonConst", "ScType::ConstCommonArc"),
+            new Pair<>("ScType::EdgeAccess", "ScType::MembershipArc"),
+            new Pair<>("ScType::EdgeAccessConstPosPerm", "ScType::ConstPermPosArc"),
+            new Pair<>("ScType::EdgeAccessConstNegPerm", "ScType::ConstPermNegArc"),
+            new Pair<>("ScType::EdgeAccessConstFuzPerm", "ScType::ConstFuzArc"),
+            new Pair<>("ScType::EdgeAccessConstPosTemp", "ScType::ConstTempPosArc"),
+            new Pair<>("ScType::EdgeAccessConstNegTemp", "ScType::ConstTempNegArc"),
+            new Pair<>("ScType::EdgeAccessConstFuzTemp", "ScType::ConstFuzArc"),
+            new Pair<>("ScType::EdgeUCommonVar", "ScType::VarCommonEdge"),
+            new Pair<>("ScType::EdgeDCommonVar", "ScType::VarCommonArc"),
+            new Pair<>("ScType::EdgeAccessVarPosPerm", "ScType::VarPermPosArc"),
+            new Pair<>("ScType::EdgeAccessVarNegPerm", "ScType::VarPermNegArc"),
+            new Pair<>("ScType::EdgeAccessVarFuzPerm", "ScType::VarFuzArc"),
+            new Pair<>("ScType::EdgeAccessVarPosTemp", "ScType::VarTempPosArc"),
+            new Pair<>("ScType::EdgeAccessVarNegTemp", "ScType::VarTempNegArc"),
+            new Pair<>("ScType::EdgeAccessVarFuzTemp", "ScType::VarFuzArc"),
+            new Pair<>("ScType::NodeConst", "ScType::ConstNode"),
+            new Pair<>("ScType::NodeVar", "ScType::VarNode"),
+            new Pair<>("ScType::Link", "ScType::NodeLink"),
+            new Pair<>("ScType::LinkClass", "ScType::NodeLinkClass"),
+            new Pair<>("ScType::NodeStruct", "ScType::NodeStructure"),
+            new Pair<>("ScType::LinkConst", "ScType::ConstNodeLink"),
+            new Pair<>("ScType::LinkConstClass", "ScType::ConstNodeLinkClass"),
+            new Pair<>("ScType::NodeConstTuple", "ScType::ConstNodeTuple"),
+            new Pair<>("ScType::NodeConstStruct", "ScType::ConstNodeStructure"),
+            new Pair<>("ScType::NodeConstRole", "ScType::ConstNodeRole"),
+            new Pair<>("ScType::NodeConstNoRole", "ScType::ConstNodeNoRole"),
+            new Pair<>("ScType::NodeConstClass", "ScType::ConstNodeClass"),
+            new Pair<>("ScType::NodeConstMaterial", "ScType::ConstNodeMaterial"),
+            new Pair<>("ScType::LinkVar", "ScType::VarNodeLink"),
+            new Pair<>("ScType::LinkVarClass", "ScType::VarNodeLinkClass"),
+            new Pair<>("ScType::NodeVarStruct", "ScType::VarNodeStructure"),
+            new Pair<>("ScType::NodeVarTuple", "ScType::VarNodeTuple"),
+            new Pair<>("ScType::NodeVarRole", "ScType::VarNodeRole"),
+            new Pair<>("ScType::NodeVarNoRole", "ScType::VarNodeNoRole"),
+            new Pair<>("ScType::NodeVarClass", "ScType::VarNodeClass"),
+            new Pair<>("ScType::NodeVarMaterial", "ScType::VarNodeMaterial")
+    );
+
     private static final Set<Pattern> METHODS_WITH_CHANGED_SIGNATURE_PATTERNS = new HashSet<>(Arrays.asList(
-            Pattern.compile(".*?\\bSearchLinksByContentSubstring\\b"),
-            Pattern.compile(".*?\\bSearchLinksByContent\\b"),
-            Pattern.compile(".*?\\bSearchLinksContentsByContentSubstring\\b"),
-            Pattern.compile(".*?\\bGetConnectorIncidentElements\\b"),
-            Pattern.compile(".*?\\bGenerateByTemplate\\b"),
-            Pattern.compile(".*?\\BuildTemplate\\b")
+            Pattern.compile(".*?\\bFindLinksByContentSubstring\\b"),
+            Pattern.compile(".*?\\bFindLinksByContent\\b"),
+            Pattern.compile(".*?\\bFindLinksContentsByContentSubstring\\b"),
+            Pattern.compile(".*?\\bGetEdgeInfo\\b"),
+            Pattern.compile(".*?\\bHelperGenTemplate\\b"),
+            Pattern.compile(".*?\\bHelperBuildTemplate\\b")
     ));
 
     private static final Set<String> EVENTS_WITHOUT_EDGE = new HashSet<>();
@@ -186,6 +237,9 @@ public class Main {
         Arrays.stream(args).forEach(System.out::println);
         processCmake(args);
         processCpp(args);
+        System.out.println();
+        System.out.println("Helpful tips for new api usage:");
+        System.out.println(SCRIPT_FOOTER_LOG);
     }
 
     private static void processCpp(String[] args) {
@@ -208,10 +262,10 @@ public class Main {
 
         removeOldStatement(readFiles(cppFiles));
         replaceCoreKeynodes(readFiles(cppFiles));
-        replaceHeaderInclude(readFiles(cppFiles));
         replaceOldEvents(readFiles(cppFiles));
-        replaceDeprecatedMethods(readFiles(cppFiles));
         printMethodsWithChangedSignatureWarning(readFiles(cppFiles));
+        replaceDeprecatedMethods(readFiles(cppFiles));
+        replaceDeprecatedTypes(readFiles(cppFiles));
         printAgentUtilsWarnings(readFiles(cppFiles));
         printAgentRegistrationWarnings(readFiles(cppFiles));
     }
@@ -386,6 +440,7 @@ public class Main {
     }
 
     private static void replaceAgentCpp(List<Pair<File, String>> filesWithCodegen) {
+        AtomicBoolean todoBlockInserted = new AtomicBoolean(false);
         filesWithCodegen.stream()
                 .filter(pair -> AGENT_NAME_IN_CPP_PATTERN.matcher(pair.getSecond()).find())
                 .map(pair -> {
@@ -398,6 +453,8 @@ public class Main {
                         agentBody = agentBody.replaceAll("\\bedgeAddr\\b", "event.GetArc()");
                         agentBody = agentBody.replaceAll("return\\s+SC_RESULT_OK\\b", "return action.FinishSuccessfully()");
                         agentBody = agentBody.replaceAll("return\\s+SC_RESULT_ERROR.*?\\b", "return action.FinishUnsuccessfully()");
+                        agentBody = agentBody.replaceAll("SC_LOG_(?<logType>\\w*?)\\b\\(", "SC_AGENT_LOG_${logType}(");
+                        agentBody = agentBody.replaceAll("SC_AGENT_LOG_(?<logType>\\w*?)\\b\\(\"" + agentName + "\\s*:?\\s*", "SC_AGENT_LOG_${logType}(\"");
                         Matcher returnMatcher = Pattern.compile("return\\s+(?<returnExpression>[^;]*?);\\n").matcher(agentBody);
                         StringBuffer sb = new StringBuffer();
                         while (returnMatcher.find()) {
@@ -410,7 +467,9 @@ public class Main {
                         }
                         returnMatcher.appendTail(sb);
                         sb.append(String.format(AGENT_HPP_OVERRIDDEN_GET_ACTION_CLASS, agentName));
-                        agentBody = sb.toString().replaceFirst(AGENT_NAME_IN_CPP_REGEX, TODO_BLOCK + "ScResult " + agentName + "::DoProgram(ScActionInitiatedEvent const & event, ScAction & action)");
+                        String prefix = todoBlockInserted.get() ? "" : TODO_BLOCK;
+                        todoBlockInserted.set(true);
+                        agentBody = sb.toString().replaceFirst(AGENT_NAME_IN_CPP_REGEX, prefix + "ScResult " + agentName + "::DoProgram(ScActionInitiatedEvent const & event, ScAction & action)");
                         agentNameMatcher.appendReplacement(fullSb, agentBody);
                     }
                     agentNameMatcher.appendTail(fullSb);
@@ -528,16 +587,12 @@ public class Main {
                 .forEach(pair -> writeToFile(pair.getFirst() + FILE_POSTFIX, pair.getSecond()));
     }
 
-    private static void replaceHeaderInclude(List<Pair<File, String>> cppFiles) {
-        cppFiles.stream()
-                .filter(pair -> OLD_SC_AGENT_INCLUDE_PATTERN.matcher(pair.getSecond()).find())
-                .map(pair -> new Pair<>(pair.getFirst(), pair.getSecond().replaceAll(OLD_SC_AGENT_INCLUDE_REGEX + "\\s*", NEW_SC_AGENT_INCLUDE + "\n")))
-                .peek(pair -> System.out.println("Replaced outdated includes from " + pair.getFirst()))
-                .forEach(pair -> writeToFile(pair.getFirst() + FILE_POSTFIX, pair.getSecond()));
-    }
-
     private static void replaceDeprecatedMethods(List<Pair<File, String>> cppFiles) {
         replaceDeprecatedStrings(cppFiles, DEPRECATED_METHODS);
+    }
+
+    private static void replaceDeprecatedTypes(List<Pair<File, String>> cppFiles) {
+        replaceDeprecatedStrings(cppFiles, DEPRECATED_TYPES);
     }
 
     private static void replaceOldEvents(List<Pair<File, String>> cppFiles) {
