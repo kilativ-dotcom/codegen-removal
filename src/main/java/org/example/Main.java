@@ -14,12 +14,6 @@ import java.util.stream.Collectors;
 
 public class Main {
     private static final String TODO_PREFIX = "//todo(codegen-removal): ";
-    private static final String TODO_BLOCK =
-            TODO_PREFIX + "remove agent starting and finishing logs, sc-machine is printing them now\n" +
-            TODO_PREFIX + "if your agent is ScActionInitiatedAgent and uses event only to get action node via event.GetOtherElement() then you can remove event from method arguments and use ScAction & action instead of your action node\n" +
-            TODO_PREFIX + "if your agent is ScActionInitiatedAgent and is having method like CheckActionClass(ScAddr actionAddr) that checks connector between action class and actionAddr then you can remove it. Before agent is started sc-machine checks that action belongs to class returned by GetActionClass()\n" +
-            TODO_PREFIX + "use action.SetResult() to pass result of your action instead of using answer or answerElements\n" +
-            TODO_PREFIX + "use auto const & [names of action arguments] = action.GetArguments<amount of arguments>(); to get action arguments\n";
 
     private static final String SCRIPT_FOOTER_LOG =
             "Remove agent starting and finishing logs, sc-machine is printing them now\n" +
@@ -467,9 +461,7 @@ public class Main {
                         }
                         returnMatcher.appendTail(sb);
                         sb.append(String.format(AGENT_HPP_OVERRIDDEN_GET_ACTION_CLASS, agentName));
-                        String prefix = todoBlockInserted.get() ? "" : TODO_BLOCK;
-                        todoBlockInserted.set(true);
-                        agentBody = sb.toString().replaceFirst(AGENT_NAME_IN_CPP_REGEX, prefix + "ScResult " + agentName + "::DoProgram(ScActionInitiatedEvent const & event, ScAction & action)");
+                        agentBody = sb.toString().replaceFirst(AGENT_NAME_IN_CPP_REGEX, "ScResult " + agentName + "::DoProgram(ScActionInitiatedEvent const & event, ScAction & action)");
                         agentNameMatcher.appendReplacement(fullSb, agentBody);
                     }
                     agentNameMatcher.appendTail(fullSb);
