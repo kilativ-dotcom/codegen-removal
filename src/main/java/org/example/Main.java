@@ -164,7 +164,8 @@ public class Main {
             new Pair<>("ScType::NodeConstTuple", "ScType::ConstNodeTuple"),
             new Pair<>("ScType::NodeConstStruct", "ScType::ConstNodeStructure"),
             new Pair<>("ScType::NodeConstRole", "ScType::ConstNodeRole"),
-            new Pair<>("ScType::NodeConstNoRole", "ScType::ConstNodeNoRole"),
+            new Pair<>("ScType::NodeConstNoRole", "ScType::ConstNodeNonRole"),
+            new Pair<>("ScType::ConstNodeNoRole", "ScType::ConstNodeNonRole"),
             new Pair<>("ScType::NodeConstClass", "ScType::ConstNodeClass"),
             new Pair<>("ScType::NodeConstMaterial", "ScType::ConstNodeMaterial"),
             new Pair<>("ScType::LinkVar", "ScType::VarNodeLink"),
@@ -172,7 +173,8 @@ public class Main {
             new Pair<>("ScType::NodeVarStruct", "ScType::VarNodeStructure"),
             new Pair<>("ScType::NodeVarTuple", "ScType::VarNodeTuple"),
             new Pair<>("ScType::NodeVarRole", "ScType::VarNodeRole"),
-            new Pair<>("ScType::NodeVarNoRole", "ScType::VarNodeNoRole"),
+            new Pair<>("ScType::NodeVarNoRole", "ScType::VarNodeNonRole"),
+            new Pair<>("ScType::VarNodeNoRole", "ScType::VarNodeNonRole"),
             new Pair<>("ScType::NodeVarClass", "ScType::VarNodeClass"),
             new Pair<>("ScType::NodeVarMaterial", "ScType::VarNodeMaterial")
     );
