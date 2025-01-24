@@ -242,6 +242,7 @@ public class Main {
 
     private static void processCpp(String[] args) {
         List<File> cppFiles = getFilesWithType(args, "c\\+\\+");
+        System.out.println("found " + cppFiles.size() + " cpp files");
         List<Pair<File, String>> filesWithCodegen = cppFiles.stream()
                 .map(Main::readLines)
                 .filter(Main::fileIsNotEmpty)
@@ -278,6 +279,7 @@ public class Main {
 
     private static void processCmake(String[] args) {
         List<File> cmakeFiles = getFilesWithType(args, "(cmake)|(text/plain)");
+        System.out.println("found " + cmakeFiles.size() + " cmake files");
         removeCmakeCodegen(cmakeFiles.stream()
                 .map(Main::readLines)
                 .filter(Main::fileIsNotEmpty)
@@ -305,6 +307,7 @@ public class Main {
                 .filter(file -> {
                     try {
                         String type = Files.probeContentType(file.toPath());
+                        System.out.println("File " + file.toPath() + " has type " + type);
                         return type != null && type.matches(".*?" + requiredType + ".*?");
                     } catch (IOException e) {
                         System.err.println("ERROR: cannot check type of " + file);
