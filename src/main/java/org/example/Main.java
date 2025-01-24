@@ -20,7 +20,6 @@ public class Main {
             "If your agent is ScActionInitiatedAgent and uses event only to get action node via event.GetOtherElement() then you can remove event from method arguments and use ScAction & action instead of your action node\n" +
             "If your agent is ScActionInitiatedAgent and is having method like CheckActionClass(ScAddr actionAddr) that checks connector between action class and actionAddr then you can remove it. Before agent is started sc-machine checks that action belongs to class returned by GetActionClass()\n" +
             "Use action.SetResult() to pass result of your action instead of using answer or answerElements\n" +
-            "Use SC_AGENT_LOG_SOMETHING() instead of SC_LOG_SOMETHING to automatically include agent name to logs messages\n" +
             "Use auto const & [names of action arguments] = action.GetArguments<amount of arguments>(); to get action arguments\n";
 
     private static final String FILE_POSTFIX = "";
@@ -452,8 +451,6 @@ public class Main {
                         agentBody = agentBody.replaceAll("\\bedgeAddr\\b", "event.GetArc()");
                         agentBody = agentBody.replaceAll("return\\s+SC_RESULT_OK\\b", "return action.FinishSuccessfully()");
                         agentBody = agentBody.replaceAll("return\\s+SC_RESULT_ERROR.*?\\b", "return action.FinishUnsuccessfully()");
-                        agentBody = agentBody.replaceAll("SC_LOG_(?<logType>\\w*?)\\b\\(", "SC_AGENT_LOG_${logType}(");
-                        agentBody = agentBody.replaceAll("SC_AGENT_LOG_(?<logType>\\w*?)\\b\\(\"" + agentName + "\\s*:?\\s*", "SC_AGENT_LOG_${logType}(\"");
                         Matcher returnMatcher = Pattern.compile("return\\s+(?<returnExpression>[^;]*?);\\n").matcher(agentBody);
                         StringBuffer sb = new StringBuffer();
                         while (returnMatcher.find()) {
